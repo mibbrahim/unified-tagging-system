@@ -100,11 +100,10 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 <header class="pagehead bg-white border-b border-gray-200 mb-6 max-sm:mb-0">
   <div class="gutter max-w-[1432px] mx-auto flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-3 min-h-[60px]">
     <div class="flex items-center gap-3 min-w-0">
-      <a class="logo h-[22px] flex-none" href="https://www.bayt.com/" target="_blank" rel="noopener" aria-label="Bayt.com (opens in a new tab)"></a>
-      <span class="h-6 w-px bg-gray-200" aria-hidden="true"></span>
+      <span class="flex-none w-8 h-8 rounded-md bg-gray-100 text-gray-500 grid place-items-center" aria-hidden="true"><svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg></span>
       <div class="min-w-0">
         <h1 class="text-base font-medium text-gray-900 leading-tight truncate">Unified Tagging System</h1>
-        <p class="tagline text-xs text-gray-500">Concept prototype · one tag engine on every device</p>
+        <p class="tagline text-xs text-gray-500">Concept prototype for Bayt.com · one tag engine on every device</p>
       </div>
     </div>
     <div class="flex flex-wrap items-center gap-4">
@@ -160,7 +159,6 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 (function(){
 "use strict";
 const LOGO=document.getElementById("logoTpl").innerHTML;
-document.querySelector(".pagehead .logo").innerHTML=LOGO;
 
 /* ---------- icons ---------- */
 const P={
