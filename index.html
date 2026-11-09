@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive prototype of a Unified Tagging System for a recruitment marketplace: one tag engine on desktop, tablet and mobile.">
+<title>Unified Tagging System · Prototype</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>tailwind.config={theme:{extend:{fontFamily:{sans:["Inter","Segoe UI","Arial","sans-serif"]}}}}</script>
+<style>
+/* Built on a Tailwind component library: Inter, gray-50 canvas, white cards (rounded-xl, gray-200 border, shadow-sm),
+   blue-600 pill buttons, multi-select dropdown with tag pills, Advance Search Grid, header + tertiary tabs, KPI cards, success alerts,
+   purple reserved for AI. Single light theme, matching the product. */
+:root{color-scheme:light}
+[hidden]{display:none!important}
+body{margin:0;background:#F9FAFB;color:#1F2937;font-family:Inter,"Segoe UI",Arial,sans-serif;padding-block:0 40px}
+.gutter{padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+button{cursor:pointer}
+:focus-visible{outline:2px solid #3B82F6;outline-offset:2px}
+
+/* custom-checkbox / custom-radio: copied from the component library */
+.custom-checkbox{appearance:none;-webkit-appearance:none;width:16px;height:16px;border:2px solid #0075FF;border-radius:4px;background:#fff;display:inline-block;position:relative;cursor:pointer;flex:none}
+.custom-checkbox:checked{background:#0075FF;border-color:#0075FF}
+.custom-checkbox:checked::after{content:"";position:absolute;left:3px;top:0;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.cb{width:16px;height:16px;border:2px solid #0075FF;border-radius:4px;background:#fff;position:relative;flex:none}
+.cb.on{background:#0075FF}
+.cb.on::after{content:"";position:absolute;left:3px;top:0;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.custom-radio{appearance:none;-webkit-appearance:none;width:16px;height:16px;border:2px solid #3377FF;border-radius:50%;background:#fff;position:relative;cursor:pointer;flex:none}
+.custom-radio:checked::before{content:"";position:absolute;width:8px;height:8px;border-radius:50%;background:#3377FF;top:2px;left:2px}
+
+/* success alert: slide in + loading line, as in the library */
+@keyframes slideIn{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+.alert-in{animation:slideIn .35s ease-out}
+@keyframes shrink{from{width:100%}to{width:0}}
+.loading-line{position:absolute;left:0;bottom:0;height:3px;background:#22C55E;animation:shrink 5.2s linear forwards}
+@media (prefers-reduced-motion: reduce){.alert-in,.loading-line{animation:none}}
+
+/* device stage */
+.device{width:100%;margin:0 auto;transition:max-width .3s ease}
+.device[data-device="desktop"]{max-width:1120px}
+.device[data-device="tablet"]{max-width:820px;border:12px solid #1F2937;border-radius:32px;background:#1F2937}
+.device[data-device="mobile"]{max-width:390px;border:10px solid #1F2937;border-radius:44px;background:#1F2937}
+.screen{position:relative;height:720px;overflow:hidden;container-type:inline-size;container-name:app;display:flex;flex-direction:column;background:#F9FAFB}
+.device[data-device="desktop"] .screen{border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.device[data-device="tablet"] .screen{border-radius:20px}
+.device[data-device="mobile"] .screen{height:760px;border-radius:34px}
+
+/* picker placement: popover (desktop) / side sheet (tablet) / bottom sheet (mobile) */
+.picker{position:absolute;z-index:30;width:360px;max-height:440px}
+.only-mobile{display:none!important}
+@container app (max-width: 900px){
+  .picker{transform:none!important;left:auto!important;top:0!important;right:0;bottom:0;width:min(380px,92%);max-height:none;border-radius:0!important;border-width:0 0 0 1px!important}
+  .col-stage{display:none}
+  .scrim{display:block!important}
+}
+@container app (max-width: 520px){
+  .picker{left:0!important;right:0;top:auto!important;bottom:0;width:100%;max-height:84%;border-radius:20px 20px 0 0!important;border-width:1px 0 0 0!important}
+  .only-desktop{display:none!important}
+  .only-mobile{display:flex!important}
+  .grid-table{display:none}
+  .card-list{display:flex!important}
+  .opt{min-height:44px}
+  .alert-slot{left:12px;right:12px;top:auto;bottom:84px}
+  .alert-slot>div{width:auto!important}
+  .pad-app{padding:12px!important}
+}
+.card-list{display:none}
+.alert-slot{position:absolute;top:16px;right:16px;z-index:40}
+
+/* screenshot mode (#shot) */
+.shot header.pagehead,.shot .guide{display:none}
+.shot .layout{display:block}
+.shot body{padding:12px}
+.shot .gutter{padding:0}
+</style>
+</head>
+<body>
+
+<header class="pagehead bg-white shadow-sm mb-6">
+  <div class="gutter max-w-[1432px] mx-auto flex flex-wrap items-center justify-between gap-4 py-4">
+    <div>
+      <h1 class="text-lg font-semibold text-gray-800">Unified Tagging System</h1>
+      <p class="text-sm text-gray-500">Interactive prototype · one tag engine, every device</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-4">
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-medium text-gray-500" id="devlbl">Device</span>
+        <div class="flex gap-1 bg-gray-100 px-1.5 py-1.5 rounded-md shadow-sm text-sm font-medium" role="group" aria-labelledby="devlbl" id="devSeg">
+          <button id="dev-desktop" data-dev="desktop" class="seg px-3 py-1 rounded" aria-pressed="true">Desktop</button>
+          <button id="dev-tablet" data-dev="tablet" class="seg px-3 py-1 rounded" aria-pressed="false">Tablet</button>
+          <button id="dev-mobile" data-dev="mobile" class="seg px-3 py-1 rounded" aria-pressed="false">Mobile</button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-medium text-gray-500" id="perlbl">Persona</span>
+        <div class="flex gap-1 bg-gray-100 px-1.5 py-1.5 rounded-md shadow-sm text-sm font-medium" role="group" aria-labelledby="perlbl" id="perSeg">
+          <button id="per-employer" data-per="employer" class="seg px-3 py-1 rounded" aria-pressed="true">Hiring team</button>
+          <button id="per-seeker" data-per="seeker" class="seg px-3 py-1 rounded" aria-pressed="false">Job seeker</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="layout gutter max-w-[1432px] mx-auto grid gap-6 items-start" style="grid-template-columns:minmax(0,1fr)">
+  <div class="min-w-0">
+    <div class="device" id="device" data-device="desktop"><div class="screen" id="screen"></div></div>
+  </div>
+  <aside class="guide bg-white border border-gray-200 rounded-xl shadow-sm p-5 flex flex-col gap-4" aria-label="Things to try">
+    <div>
+      <h2 class="text-base font-semibold text-gray-800">Things to try</h2>
+      <p class="text-sm text-gray-500 mt-1">Ticks itself as you go.</p>
+    </div>
+    <ul id="tasks" class="flex flex-col gap-3 text-sm text-gray-700"></ul>
+    <div class="border-t border-gray-200 pt-4 flex flex-col gap-2.5 text-sm text-gray-600">
+      <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Reading a tag</p>
+      <div class="flex items-center gap-2"><span class="inline-flex items-center text-sm px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">hm-review</span><span>Status</span></div>
+      <div class="flex items-center gap-2"><span class="inline-flex items-center text-sm px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800">strong-yes</span><span>Priority</span></div>
+      <div class="flex items-center gap-2"><span class="inline-flex items-center text-sm px-2 py-0.5 rounded-full bg-green-100 text-green-800">react</span><span>Skill</span></div>
+      <div class="flex items-center gap-2"><span class="inline-flex items-center text-sm px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">referral</span><span>Source or platform</span></div>
+      <div class="flex items-center gap-2"><span class="inline-flex flex-none whitespace-nowrap items-center gap-1 text-sm px-2 py-0.5 rounded-full bg-gray-100 text-gray-800" id="lockDemo">top-pick</span><span>Lock = only you can see it</span></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+(function(){
+"use strict";
+/* ---------- icons (outline, 24px grid, as used in the library's alerts) ---------- */
+const P={
+ search:"M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z", x:"M6 18L18 6M6 6l12 12", check:"M5 13l4 4L19 7",
+ filter:"M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z",
+ users:"M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
+ chart:"M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
+ sparkles:"M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z",
+ bookmark:"M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z",
+ broom:"M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10",
+ briefcase:"M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
+ lock:"M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z",
+ tag:"M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z",
+ print:"M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z",
+ download:"M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4",
+ left:"M15 19l-7-7 7-7", right:"M9 5l7 7-7 7", down:"M19 9l-7 7-7-7", up:"M5 15l7-7 7 7",
+ merge:"M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4",
+ archive:"M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4",
+ share:"M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z",
+ warn:"M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
+ clock:"M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z", plus:"M12 4v16m8-8H4",
+ undo:"M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6", eye:"M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z",
+ bolt:"M13 10V3L4 14h7v7l9-11h-7z", refresh:"M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+};
+const ic=(n,c)=>`<svg class="${c||"w-4 h-4"}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="${P[n]}"/></svg>`;
+document.getElementById("lockDemo").insertAdjacentHTML("afterbegin", ic("lock","w-3 h-3"));
+
+/* ---------- tag engine (UI-agnostic) ---------- */
+const norm=s=>String(s).toLowerCase().replace(/^#/,"").replace(/[\s_\-.]+/g,"");
+function lev(a,b){ if(a===b) return 0; const m=a.length,n=b.length; if(!m) return n; if(!n) return m;
+  let prev=Array.from({length:n+1},(_,i)=>i);
+  for(let i=1;i<=m;i++){ const cur=[i]; for(let j=1;j<=n;j++) cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1)); prev=cur; }
+  return prev[n]; }
+const slug=s=>String(s).trim().toLowerCase().replace(/^#/,"").replace(/[^a-z0-9+]+/g,"-").replace(/^-+|-+$/g,"").slice(0,32);
+function matchTag(t,q){ const nq=norm(q); if(!nq) return null; const nn=norm(t.name);
+  if(nn===nq) return {score:100,why:"Exact match"};
+  for(const a of t.aliases) if(norm(a)===nq) return {score:95,why:`Synonym “${a}”`};
+  if(nn.startsWith(nq)) return {score:80,why:""};
+  for(const a of t.aliases) if(norm(a).startsWith(nq)) return {score:70,why:`Synonym “${a}”`};
+  if(nn.includes(nq)) return {score:55,why:""};
+  if(nq.length>=4){ const d=Math.min(lev(nq,nn.slice(0,Math.max(nq.length,nn.length))),lev(nq,nn));
+    if(d<=Math.max(1,Math.floor(nq.length/4))) return {score:42-d*4,why:"Similar spelling"}; }
+  return null; }
+
+/* ---------- persona config + example data (fictional) ---------- */
+const PERSONAS={
+ employer:{ title:"Senior Frontend Engineer", sub:"Req #1042 · Hiring team: Priya (TA lead), Marcus (hiring manager), you",
+  noun:"candidate", nouns:"candidates", itemsTab:"Candidates", cols:["Candidate","Stage","Tags"], teamName:"the hiring team",
+  scopes:{platform:"Platform",team:"Team",personal:"Only me"}, contentWhy:"From résumé", hygieneTab:"Tag hygiene",
+  tags:[["hm-review","status","team",[],41,0],["phone-screen","status","team",[],63,1],["follow-up","status","team",["followup"],15,6],
+   ["strong-yes","priority","team",[],28,1],["revisit-q3","priority","team",[],12,14],["silver-medalist","priority","team",[],19,20],
+   ["frontend","skill","team",["fe","front end"],88,2],["javascript","skill","team",["js","ecmascript"],120,1],["typescript","skill","team",["ts"],74,1],
+   ["react","skill","team",["reactjs","react.js"],95,1],["graphql","skill","team",[],22,9],["node","skill","team",["nodejs","node.js"],40,4],["leadership","skill","team",[],31,3],
+   ["referral","source","platform",[],140,2],["agency-sourced","source","team",[],9,11],
+   ["open-to-remote","platform","platform",["remote","wfh"],300,0],["visa-sponsorship","platform","platform",["visa"],85,5],["relocation-ok","platform","platform",["relocate"],60,8],
+   ["top-pick","personal","personal",[],0,0],["call-back","personal","personal",[],0,2],["front-end","personal","personal",[],0,12],["old-pipeline-2024","personal","personal",[],0,132]],
+  items:[["Alex Morgan","Senior Frontend Engineer · Berlin · 7 yrs","Interview",["react","typescript","graphql"],["hm-review","referral","react"]],
+   ["Jordan Lee","Frontend Engineer · Remote, Lisbon · 4 yrs","Phone screen",["react","javascript","node"],["phone-screen","open-to-remote"]],
+   ["Sofia Martins","Staff Engineer · Madrid · 11 yrs","Interview",["typescript","leadership","node"],["strong-yes","leadership","hm-review"]],
+   ["Kenji Watanabe","UI Engineer · Tokyo · 5 yrs","Applied",["javascript","react"],["front-end","visa-sponsorship"]],
+   ["Amara Okafor","Full-stack Engineer · Lagos · 6 yrs","Phone screen",["node","typescript","react"],["top-pick","phone-screen"]],
+   ["Liam O’Brien","Frontend Engineer · Dublin · 3 yrs","Applied",["javascript"],["silver-medalist","revisit-q3"]],
+   ["Chen Wei","Senior Frontend Engineer · Singapore · 8 yrs","Applied",["react","graphql","typescript"],["top-pick","relocation-ok"]],
+   ["Fatima Zahra","Engineering Manager · Casablanca · 10 yrs","Offer",["leadership","javascript"],["agency-sourced","call-back","strong-yes"]],
+   ["Diego Alvarez","Frontend Engineer · Mexico City · 5 yrs","Applied",["react","typescript"],["top-pick","follow-up","frontend"]]],
+  views:[{name:"Hiring manager queue",desc:"Everything waiting on Marcus",all:["hm-review"],shared:true},
+   {name:"Top picks to call",desc:"Your private shortlist",all:["top-pick"],shared:false},
+   {name:"Remote React talent",desc:"Reusable sourcing pool",all:["open-to-remote","react"],shared:true},
+   {name:"Silver medalists",desc:"Strong runners-up for the next req",all:["silver-medalist"],shared:true}],
+  feed:[["Marcus tagged Sofia Martins strong-yes","Yesterday"],["Priya merged frontend-dev into frontend","3 days ago"],["Priya created team tag revisit-q3","Last week"]],
+  tasks:[["open","Click <b>Add tag</b> on Alex Morgan. Suggestions come from the résumé and from what the team tags together."],
+   ["alias","Type <b>js</b>. It finds the existing <b>javascript</b> tag instead of creating a new one."],
+   ["dup","Type <b>frontnd</b>. You are warned it looks like <b>frontend</b>."],
+   ["filter","Click any tag in the grid to filter by it, then save the filter as a view."],
+   ["bulk","Tick three candidates and tag them together."],
+   ["merge","Open <b>Tag hygiene</b> and merge a duplicate."],
+   ["device","Switch to <b>Mobile</b> and tag someone from the bottom sheet."],
+   ["insights","Open <b>Insights</b> to see this session measured."]]},
+ seeker:{ title:"My job search", sub:"Shared with my coach: Maya R., university career services",
+  noun:"job", nouns:"jobs", itemsTab:"Saved jobs", cols:["Job","Status","Tags"], teamName:"your coach",
+  scopes:{platform:"Platform",team:"Shared with coach",personal:"Only me"}, contentWhy:"From job post", hygieneTab:"Tidy up",
+  tags:[["applied","status","platform",[],900,1],["interviewing","status","platform",[],300,3],["coach-review","status","team",[],4,2],
+   ["dream-job","priority","personal",["dream"],0,1],["follow-up-friday","priority","personal",["follow up","followup"],0,4],["dreamjob","personal","personal",[],0,9],
+   ["remote","platform","platform",["wfh","work from home"],2400,0],["hybrid","platform","platform",[],1500,2],["visa-sponsorship","platform","platform",["visa"],700,5],
+   ["react","skill","platform",["reactjs"],1800,1],["typescript","skill","platform",["ts"],1300,6],["design-systems","skill","platform",["design system"],400,6],
+   ["salary-90k-plus","personal","personal",[],0,3],["startup","personal","personal",[],0,7],["old-search-2023","personal","personal",[],0,210]],
+  items:[["Senior Frontend Engineer","Northwind Labs · Remote · €85–100k","Applied",["react","typescript","design-systems","remote"],["dream-job","remote","applied"]],
+   ["Frontend Engineer","Blue Harbor Health · Hybrid, Amsterdam · €70–80k","Saved",["react","hybrid"],["coach-review","hybrid"]],
+   ["UI Engineer","Juniper Studio · Remote · €75–90k","Saved",["design-systems","react","remote"],["dreamjob","remote"]],
+   ["Software Engineer","Cobalt Freight · Hamburg · €65–75k · sponsors visas","Saved",["typescript","visa-sponsorship"],["visa-sponsorship"]],
+   ["Frontend Lead","Atlas Robotics · Hybrid, Munich · €95–110k","Interviewing",["react","typescript","hybrid"],["dream-job","interviewing","salary-90k-plus"]],
+   ["Web Developer","Meridian Bank · Frankfurt · €60–70k","Applied",["typescript"],["follow-up-friday","applied"]]],
+  views:[{name:"Dream jobs",desc:"Roles you’d move for",all:["dream-job"],shared:false},
+   {name:"Follow up this week",desc:"Nudge recruiters on Friday",all:["follow-up-friday"],shared:false},
+   {name:"For Maya to review",desc:"Shared with your coach",all:["coach-review"],shared:true}],
+  feed:[["Maya commented on Frontend Engineer · Blue Harbor Health","2 hours ago"],["applied was added automatically when you applied to Meridian Bank","4 days ago"]],
+  tasks:[["open","Click <b>Add tag</b> on a job. Suggestions come from the job post and your habits."],
+   ["alias","Type <b>wfh</b>. It finds the platform tag <b>remote</b>."],
+   ["dup","Type <b>dreamjb</b>. You are steered to <b>dream-job</b>."],
+   ["filter","Click a tag to filter, then save it as a view."],
+   ["bulk","Tick two jobs and tag them <b>coach-review</b> to share them with Maya."],
+   ["merge","Open <b>Tidy up</b> and merge <b>dreamjob</b> into <b>dream-job</b>."],
+   ["device","Switch to <b>Mobile</b>."],["insights","Open <b>Insights</b>."]]}
+};
+function build(p){ const c=PERSONAS[p];
+  const tags=c.tags.map((t,i)=>({id:p[0]+i,name:t[0],group:t[1],scope:t[2],aliases:t[3].slice(),base:t[4],last:t[5],state:"active"}));
+  const by=Object.fromEntries(tags.map(t=>[t.name,t]));
+  return {cfg:c,tags,
+    items:c.items.map((it,i)=>({id:p[0]+"i"+i,name:it[0],meta:it[1],stage:it[2],skills:it[3],tags:new Set(it[4].map(n=>by[n].id))})),
+    views:c.views.map(v=>({name:v.name,desc:v.desc,all:v.all.map(n=>by[n].id),shared:v.shared})),
+    feed:c.feed.map(f=>({text:f[0],when:f[1]})),recent:[]}; }
+
+const S={persona:"employer",device:"desktop",tab:"items",hyTab:"review",filters:[],q:"",selected:new Set(),picker:null,hover:null,
+  events:[],toast:null,undo:null,done:{employer:new Set(),seeker:new Set()},db:{employer:build("employer"),seeker:build("seeker")}};
+const D=()=>S.db[S.persona], C=()=>D().cfg;
+const tagById=id=>D().tags.find(t=>t.id===id);
+const active=()=>D().tags.filter(t=>t.state==="active");
+const itemCount=id=>D().items.filter(i=>i.tags.has(id)).length;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const plural=(n,a,b)=>n===1?a:b;
+function log(type,data){ S.events.push(Object.assign({type,persona:S.persona,device:S.device,at:Date.now()},data||{})); }
+function markDone(k){ if(!S.done[S.persona].has(k)){ S.done[S.persona].add(k); renderTasks(); } }
+
+function suggest(ids){
+  const items=D().items.filter(i=>ids.includes(i.id));
+  const onAll=new Set(active().filter(t=>items.every(i=>i.tags.has(t.id))).map(t=>t.id));
+  const score=new Map(),why=new Map();
+  const add=(id,s,w)=>{ if(onAll.has(id)) return; const t=tagById(id); if(!t||t.state!=="active") return;
+    score.set(id,(score.get(id)||0)+s); if(!why.has(id)||s>=30) why.set(id,w); };
+  for(const it of items){
+    for(const sk of it.skills) for(const t of active()) if(norm(t.name)===norm(sk)||t.aliases.some(a=>norm(a)===norm(sk))) add(t.id,50,C().contentWhy);
+    for(const tid of it.tags) for(const o of D().items){ if(o===it||!o.tags.has(tid)) continue;
+      for(const x of o.tags) if(!it.tags.has(x)){ const t=tagById(x); if(t&&t.group!=="skill") add(x,14,`Often used with ${tagById(tid).name}`); } }
+  }
+  D().recent.slice(0,4).forEach((id,k)=>add(id,32-k*4,"You used recently"));
+  for(const t of active()) if(t.scope!=="personal"&&t.group==="status"&&t.last<=3) add(t.id,6+Math.log10(1+t.base)*3,t.scope==="team"?`Active in ${C().teamName}`:"Popular on the platform");
+  return [...score.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5).map(([id])=>({tag:tagById(id),why:why.get(id),source:"suggestion"}));
+}
+function search(q,ex){ const out=[];
+  for(const t of active()){ if(ex&&ex.has(t.id)) continue; const m=matchTag(t,q);
+    if(m) out.push({tag:t,why:m.why,score:m.score+Math.log10(1+t.base+itemCount(t.id)*5)*2,source:"search"}); }
+  return out.sort((a,b)=>b.score-a.score).slice(0,5); }
+function nearDuplicate(q){ const nq=norm(q); if(nq.length<3) return null; let best=null;
+  for(const t of active()){ const d=Math.min(lev(nq,norm(t.name)),...t.aliases.map(a=>lev(nq,norm(a)))); if(d===0) return null; if(d<=2&&(!best||d<best.d)) best={tag:t,d}; }
+  return best; }
+
+function applyTag(tagId,ids,source,rank){
+  const changed=[]; for(const it of D().items) if(ids.includes(it.id)&&!it.tags.has(tagId)){ it.tags.add(tagId); changed.push(it.id); }
+  const t=tagById(tagId); t.last=0; D().recent=[tagId,...D().recent.filter(x=>x!==tagId)].slice(0,8);
+  log("tag_applied",{tag:t.name,source,rank,n:changed.length,ms:S.picker?Date.now()-S.picker.openedAt:null});
+  if(changed.length){ const who=ids.length>1?`${changed.length} ${C().nouns}`:D().items.find(i=>i.id===changed[0]).name;
+    D().feed.unshift({text:`You tagged ${who} ${t.name}`,when:"Just now"});
+    toast("Tag added",`${esc(t.name)} added to ${esc(who)}.`,{type:"apply",tagId,ids:changed}); }
+  if(ids.length>=3||(S.persona==="seeker"&&ids.length>=2)) markDone("bulk");
+  if(S.device==="mobile") markDone("device");
+}
+function removeTag(ids,tagId){ const changed=[];
+  for(const it of D().items) if(ids.includes(it.id)&&it.tags.has(tagId)){ it.tags.delete(tagId); changed.push(it.id); }
+  if(!changed.length) return; log("tag_removed",{tag:tagById(tagId).name});
+  toast("Tag removed",`${esc(tagById(tagId).name)} removed.`,{type:"remove",tagId,ids:changed}); }
+function createTag(name,scope){ const s=slug(name); if(!s) return null;
+  const ex=active().find(t=>norm(t.name)===norm(s)); if(ex) return ex;
+  const t={id:S.persona[0]+"n"+Date.now(),name:s,group:scope==="personal"?"personal":"status",scope,aliases:[],base:0,last:0,state:"active"};
+  D().tags.push(t); log("tag_created",{tag:s,scope}); return t; }
+function mergeTag(fromId,intoId){ const f=tagById(fromId),t=tagById(intoId);
+  for(const it of D().items) if(it.tags.has(fromId)){ it.tags.delete(fromId); it.tags.add(intoId); }
+  f.state="merged"; t.aliases.push(f.name);
+  D().views.forEach(v=>v.all=v.all.map(x=>x===fromId?intoId:x)); S.filters=S.filters.map(x=>x===fromId?intoId:x);
+  log("tag_merged",{from:f.name,into:t.name}); D().feed.unshift({text:`You merged ${f.name} into ${t.name}`,when:"Just now"});
+  markDone("merge"); toast("Tags merged",`${esc(f.name)} now points to ${esc(t.name)}. Searching “${esc(f.name)}” still finds it.`,null); }
+function toast(title,msg,undo){ S.toast={title,msg}; S.undo=undo; renderToast(); clearTimeout(toast.t); toast.t=setTimeout(()=>{S.toast=null;S.undo=null;renderToast();},5200); }
+function doUndo(){ const u=S.undo; if(!u) return;
+  for(const it of D().items) if(u.ids.includes(it.id)){ u.type==="apply"?it.tags.delete(u.tagId):it.tags.add(u.tagId); }
+  log("tag_undo",{}); S.toast=null; S.undo=null; renderToast(); renderBody(); if(S.picker) renderPickerBody(); }
+
+/* ---------- components ---------- */
+const PILL={status:"bg-blue-100 text-blue-800",priority:"bg-yellow-100 text-yellow-800",skill:"bg-green-100 text-green-800",
+  source:"bg-gray-100 text-gray-800",platform:"bg-gray-100 text-gray-800",personal:"bg-gray-100 text-gray-800"};
+function pill(t,o){ o=o||{}; const lock=t.scope==="personal"?ic("lock","w-3 h-3 flex-none"):"";
+  const base=`inline-flex items-center gap-1 text-sm px-2 py-0.5 rounded-full whitespace-nowrap ${PILL[t.group]}`;
+  const title=`${esc(t.name)} · ${esc(C().scopes[t.scope])}`;
+  if(o.remove) return `<span class="${base}" title="${title}">${lock}${esc(t.name)}<button class="ml-0.5 opacity-70 hover:opacity-100" data-act="${o.remove}" data-tag="${t.id}" aria-label="Remove ${esc(t.name)}">${ic("x","w-3 h-3")}</button></span>`;
+  if(o.filter) return `<button class="${base} hover:ring-1 hover:ring-current" data-act="filter-add" data-tag="${t.id}" title="Filter by ${esc(t.name)}">${lock}${esc(t.name)}</button>`;
+  return `<span class="${base}" title="${title}">${lock}${esc(t.name)}</span>`; }
+const btnPrimary="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-full shadow-sm";
+const btnSecondary="inline-flex items-center gap-2 border border-blue-600 text-blue-600 hover:bg-blue-50 text-sm font-medium px-4 py-2 rounded-full bg-white";
+const btnTertiary="inline-flex items-center gap-2 bg-[#EDF3FF] border border-[#E2E8F0] text-blue-600 text-sm font-medium px-3 py-1.5 rounded-full";
+const link="text-sm text-blue-600 hover:underline font-medium";
+const sortTags=ids=>[...ids].map(tagById).filter(t=>t&&t.state==="active").sort((a,b)=>"status priority skill source platform personal".indexOf(a.group)-"status priority skill source platform personal".indexOf(b.group));
+
+/* ---------- app shell ---------- */
+const screen=document.getElementById("screen");
+const TABS=()=>[["items",C().itemsTab,S.persona==="employer"?"users":"briefcase"],["views","Smart views","bookmark"],["hygiene",C().hygieneTab,"broom"],["insights","Insights","chart"]];
+function renderApp(){
+  screen.innerHTML=`
+   <div class="bg-white shadow-sm flex-none">
+     <div class="flex items-center justify-between gap-3 px-5 pt-3 pb-2">
+       <div class="flex items-center gap-2 text-sm min-w-0"><span class="flex-none w-7 h-7 rounded-md bg-blue-600 text-white grid place-items-center">${ic("tag","w-4 h-4")}</span>
+         <span class="font-semibold text-gray-800 truncate">${S.persona==="employer"?"Hiring":"Job search"}</span></div>
+       <div class="only-desktop flex items-center -space-x-1" aria-hidden="true">${(S.persona==="employer"?["PR","MA","YO"]:["ME","MR"]).map(a=>`<span class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold grid place-items-center ring-2 ring-white">${a}</span>`).join("")}</div>
+     </div>
+     <nav class="only-desktop flex gap-2 bg-gray-50 px-4 py-2 border-t border-gray-100" role="tablist">${TABS().map(([k,l,i])=>`<button role="tab" data-act="tab" data-tab="${k}" aria-selected="${S.tab===k}" class="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${S.tab===k?"text-blue-600 bg-blue-50":"text-gray-700 hover:text-blue-600"}">${ic(i,"w-4 h-4")}${l}${k==="hygiene"&&hygieneIssues().length?`<span class="text-xs bg-yellow-100 text-yellow-800 rounded-full px-1.5">${hygieneIssues().length}</span>`:""}</button>`).join("")}</nav>
+   </div>
+   <main class="flex-1 overflow-auto pad-app p-5" id="body"></main>
+   <nav class="only-mobile flex-none bg-white border-t border-gray-200 px-2 pt-1.5 pb-4 justify-around" role="tablist">${TABS().map(([k,l,i])=>`<button role="tab" data-act="tab" data-tab="${k}" aria-selected="${S.tab===k}" class="flex flex-col items-center gap-1 min-h-[44px] px-2 text-[11px] font-medium ${S.tab===k?"text-blue-600":"text-gray-500"}"><span class="px-4 py-1 rounded-full ${S.tab===k?"bg-blue-50":""}">${ic(i,"w-5 h-5")}</span>${l.replace("Smart views","Views").replace("Saved jobs","Jobs")}</button>`).join("")}</nav>
+   <div id="overlay"></div><div id="toastSlot"></div>`;
+  renderBody(); renderPicker(); renderToast();
+}
+function renderBody(){ const b=document.getElementById("body"); if(!b) return;
+  screen.querySelectorAll('[data-act="tab"]').forEach(x=>{ const on=x.dataset.tab===S.tab; x.setAttribute("aria-selected",on); });
+  b.innerHTML = S.tab==="items"?itemsView():S.tab==="views"?viewsView():S.tab==="hygiene"?hygieneView():insightsView();
+  if(S.tab==="insights") markDone("insights");
+}
+function rerenderShell(){ const keep=S.picker; renderApp(); if(keep) S.picker=keep; }
+
+/* ---------- Items: Advance Search Grid pattern ---------- */
+function visible(){ const q=S.q.trim().toLowerCase(); return D().items.filter(i=>S.filters.every(f=>i.tags.has(f))&&(!q||(i.name+" "+i.meta).toLowerCase().includes(q))); }
+function itemsView(){ const c=C(), list=visible(), n=S.selected.size;
+  const fpills=S.filters.map(id=>pill(tagById(id),{remove:"filter-remove"})).join("");
+  const savedAs=D().views.find(v=>v.all.length===S.filters.length&&v.all.every(x=>S.filters.includes(x)));
+  return `<section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div class="flex justify-between items-start flex-wrap gap-3 mb-4">
+      <div class="min-w-0"><h2 class="text-lg font-semibold text-gray-800">${esc(c.title)}</h2><p class="text-sm text-gray-500">${esc(c.sub)}</p></div>
+      ${n?`<div class="flex items-center gap-2 flex-wrap"><span class="text-sm text-gray-600">${n} selected</span><button class="${btnSecondary}" data-act="clear-sel">Clear</button><button class="${btnPrimary}" data-act="open-bulk">${ic("tag","w-4 h-4")}Tag ${n} ${plural(n,c.noun,c.nouns)}</button></div>`:""}
+    </div>
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div class="flex items-center gap-3 flex-wrap min-w-0">
+        <div class="border ${S.picker&&S.picker.mode==="filter"?"border-blue-600":"border-gray-300"} rounded-md px-3 py-1.5 flex flex-wrap items-center gap-2 min-w-[240px] max-w-full bg-white">
+          ${ic("filter","w-3.5 h-3.5 text-gray-400")}${fpills||`<span class="text-sm text-gray-400">Filter by tags</span>`}
+          <button class="ml-auto text-gray-500 hover:text-blue-600" data-act="open-filter" aria-label="Add tag filter">${ic("down","w-4 h-4")}</button>
+        </div>
+        ${S.filters.length?(savedAs?`<span class="text-sm text-gray-500">Saved as “${esc(savedAs.name)}”</span>`:`<button class="${link}" data-act="save-view">Save as view</button>`):""}
+      </div>
+      <div class="relative only-desktop"><input id="gridSearch" type="text" value="${esc(S.q)}" placeholder="Search ${c.nouns}…" class="pl-9 pr-3 py-1.5 border border-gray-300 rounded-full text-sm w-56 focus:outline-none focus:ring-2 focus:ring-blue-500"><span class="absolute left-3 top-2 text-gray-400">${ic("search","w-4 h-4")}</span></div>
+    </div>
+    <div class="grid-table overflow-x-auto -mx-5">
+      <table class="min-w-full text-sm text-gray-800">
+        <thead class="text-gray-500 border-y border-gray-200 bg-gray-50 text-left"><tr>
+          <th class="px-4 py-2 w-10 pl-5"><input type="checkbox" class="custom-checkbox" id="selAll" data-act="sel-all" aria-label="Select all" ${list.length&&list.every(i=>S.selected.has(i.id))?"checked":""}></th>
+          <th class="px-4 py-2 font-medium">${c.cols[0]} <span class="inline-block align-[-2px] text-gray-400">${ic("filter","w-3 h-3")}</span></th>
+          <th class="px-4 py-2 font-medium col-stage">${c.cols[1]} <span class="inline-block align-[-2px] text-gray-400">${ic("filter","w-3 h-3")}</span></th>
+          <th class="px-4 py-2 font-medium">${c.cols[2]}</th></tr></thead>
+        <tbody class="divide-y divide-gray-100">${list.map(it=>`<tr class="${S.selected.has(it.id)?"bg-blue-50":"hover:bg-gray-50"}" data-row="${it.id}">
+          <td class="px-4 py-3 pl-5 align-top"><input type="checkbox" class="custom-checkbox mt-0.5" id="sel-${it.id}" data-act="sel" data-item="${it.id}" ${S.selected.has(it.id)?"checked":""} aria-label="Select ${esc(it.name)}"></td>
+          <td class="px-4 py-3 align-top"><span class="text-blue-600 font-medium">${esc(it.name)}</span><div class="text-xs text-gray-500 mt-0.5">${esc(it.meta)}</div></td>
+          <td class="px-4 py-3 align-top text-gray-700 col-stage whitespace-nowrap">${esc(it.stage)}</td>
+          <td class="px-4 py-3 align-top"><div class="flex flex-wrap items-center gap-1.5">${sortTags(it.tags).map(t=>pill(t,{filter:true})).join("")}
+            <button class="inline-flex items-center gap-1 ${link}" data-act="open-tag" data-item="${it.id}">${ic("plus","w-3.5 h-3.5")}Add tag</button></div></td></tr>`).join("")
+          ||`<tr><td colspan="4" class="px-5 py-10 text-center text-gray-500">No ${c.nouns} have all of these tags. Remove a filter to see more.</td></tr>`}</tbody>
+      </table>
+    </div>
+    <div class="card-list flex-col divide-y divide-gray-100 -mx-5 border-y border-gray-200">${list.map(it=>`<div class="flex gap-3 px-4 py-3 ${S.selected.has(it.id)?"bg-blue-50":""}">
+        <input type="checkbox" class="custom-checkbox mt-1" id="selm-${it.id}" data-act="sel" data-item="${it.id}" ${S.selected.has(it.id)?"checked":""} aria-label="Select ${esc(it.name)}">
+        <div class="min-w-0 flex-1"><div class="flex justify-between gap-2"><span class="text-blue-600 font-medium">${esc(it.name)}</span><span class="text-xs text-gray-500 whitespace-nowrap">${esc(it.stage)}</span></div>
+          <div class="text-xs text-gray-500 mt-0.5">${esc(it.meta)}</div>
+          <div class="flex flex-wrap items-center gap-1.5 mt-2">${sortTags(it.tags).map(t=>pill(t,{filter:true})).join("")}
+          <button class="inline-flex items-center gap-1 ${link} min-h-[32px]" data-act="open-tag" data-item="${it.id}">${ic("plus","w-3.5 h-3.5")}Add tag</button></div></div></div>`).join("")
+        ||`<div class="px-4 py-8 text-center text-sm text-gray-500">No ${c.nouns} have all of these tags.</div>`}</div>
+    <div class="flex items-center justify-between -mx-5 -mb-5 px-5 py-3 bg-gray-50 text-sm text-gray-600 rounded-b-xl gap-3 flex-wrap">
+      <div class="flex items-center gap-3"><span class="only-desktop flex gap-2"><button class="w-8 h-8 border border-gray-300 rounded hover:bg-gray-100 grid place-items-center" title="Print">${ic("print","w-4 h-4")}</button><button class="w-8 h-8 border border-gray-300 rounded hover:bg-gray-100 grid place-items-center" title="Export">${ic("download","w-4 h-4")}</button></span>
+        <span>Showing ${list.length?1:0} to ${list.length} of ${D().items.length} ${c.nouns}</span></div>
+      <div class="flex items-center gap-1"><button class="w-8 h-8 border border-gray-300 rounded grid place-items-center text-gray-400" aria-label="Previous page">${ic("left","w-3.5 h-3.5")}</button><button class="w-8 h-8 border border-blue-600 rounded bg-blue-600 text-white">1</button><button class="w-8 h-8 border border-gray-300 rounded grid place-items-center text-gray-400" aria-label="Next page">${ic("right","w-3.5 h-3.5")}</button></div>
+    </div></section>`; }
+
+/* ---------- Smart views: card pattern ---------- */
+function viewsView(){ const c=C();
+  return `<div class="flex flex-col gap-4"><div><h2 class="text-lg font-semibold text-gray-800">Smart views</h2><p class="text-sm text-gray-500">Saved tag filters. Shared views appear for ${esc(c.teamName)} too.</p></div>
+   <div class="grid gap-4" style="grid-template-columns:repeat(auto-fill,minmax(250px,1fr))">${D().views.map((v,i)=>{ const n=D().items.filter(it=>v.all.every(x=>it.tags.has(x))).length;
+    return `<div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm flex flex-col gap-3">
+      <div class="flex items-start gap-3"><div class="p-2 rounded-full ${v.shared?"bg-blue-100 text-blue-600":"bg-gray-100 text-gray-600"}">${ic(v.shared?"users":"lock","w-5 h-5")}</div>
+        <div class="min-w-0"><p class="text-sm font-semibold text-gray-800">${esc(v.name)}</p><p class="text-xs text-gray-500">${esc(v.desc)} · ${v.shared?"Shared":"Only me"}</p></div></div>
+      <div class="flex flex-wrap items-center gap-1.5 text-xs text-gray-500">Tagged ${v.all.map(id=>pill(tagById(id))).join('<span>and</span>')}</div>
+      <div class="flex items-center justify-between mt-auto pt-1"><span class="text-2xl font-bold text-gray-900">${n}<span class="text-xs font-normal text-gray-500 ml-1">${plural(n,c.noun,c.nouns)}</span></span>
+        <button class="${btnSecondary} !py-1.5" data-act="open-view" data-view="${i}">Open</button></div></div>`; }).join("")}</div></div>`; }
+
+/* ---------- Hygiene: tertiary tabs + action cards + grid ---------- */
+function hygieneIssues(){ const out=[],act=active(),seen=new Set();
+  for(const a of act){ if(a.scope!=="personal") continue;
+    for(const b of act){ if(a===b) continue; const k=[a.id,b.id].sort().join("|"); if(seen.has(k)) continue;
+      if(lev(norm(a.name),norm(b.name))<=1){ seen.add(k); let f=a,t=b; if(b.scope==="personal"&&itemCount(a.id)>itemCount(b.id)){f=b;t=a;} out.push({kind:"dup",from:f,into:t}); } } }
+  for(const t of act) if(t.last>=90&&itemCount(t.id)===0) out.push({kind:"stale",tag:t});
+  for(const t of act) if(t.scope==="personal"&&itemCount(t.id)>=3) out.push({kind:"promote",tag:t});
+  return out; }
+function actionCard(border,iconBg,icon,title,body,actions){ return `<div class="bg-white rounded-md shadow-sm border ${border} px-[18px] py-5 flex flex-col gap-3">
+  <div class="flex items-start gap-3"><div class="p-2 rounded-full ${iconBg} flex-none">${icon}</div><div class="min-w-0"><p class="text-sm font-semibold text-gray-800">${title}</p><div class="text-sm text-gray-600 mt-1">${body}</div></div></div>
+  <div class="flex justify-end gap-2 mt-auto">${actions}</div></div>`; }
+function hygieneView(){ const c=C(), issues=hygieneIssues();
+  const rows=active().slice().sort((a,b)=>(itemCount(b.id)+b.base/50)-(itemCount(a.id)+a.base/50));
+  const tabs=`<div class="flex gap-2 bg-gray-100 px-2 py-1.5 rounded-md shadow-sm text-sm font-medium w-max max-w-full">
+    <button data-act="hytab" data-hy="review" class="px-3 py-1 rounded ${S.hyTab==="review"?"bg-white text-blue-600":"text-gray-700 hover:text-blue-600"}">Needs review (${issues.length})</button>
+    <button data-act="hytab" data-hy="all" class="px-3 py-1 rounded ${S.hyTab==="all"?"bg-white text-blue-600":"text-gray-700 hover:text-blue-600"}">All tags (${rows.length})</button></div>`;
+  const cards=issues.map(x=>{
+    if(x.kind==="dup") return actionCard("border-[#FFDD8A]","bg-yellow-100 text-yellow-700",ic("merge","w-4 h-4"),"Possible duplicate",
+      `<div class="flex flex-wrap items-center gap-1.5">${pill(x.from)}<span>looks like</span>${pill(x.into)}</div><p class="mt-2">Merging moves ${itemCount(x.from.id)} ${plural(itemCount(x.from.id),c.noun,c.nouns)}. “${esc(x.from.name)}” keeps working as a synonym.</p>`,
+      `<button class="${btnPrimary} !py-1.5" data-act="merge" data-from="${x.from.id}" data-into="${x.into.id}">Merge into ${esc(x.into.name)}</button>`);
+    if(x.kind==="stale") return actionCard("border-gray-200","bg-gray-100 text-gray-600",ic("clock","w-4 h-4"),`Unused for ${x.tag.last} days`,
+      `<div>${pill(x.tag)}</div><p class="mt-2">Archiving removes it from suggestions. History and reports keep it.</p>`,
+      `<button class="${btnSecondary} !py-1.5" data-act="archive" data-tag="${x.tag.id}">Archive</button>`);
+    return actionCard("border-[#BFDBFE]","bg-blue-100 text-blue-600",ic("share","w-4 h-4"),"Popular personal tag",
+      `<div class="flex items-center gap-1.5">${pill(x.tag)}<span>on ${itemCount(x.tag.id)} ${c.nouns}</span></div><p class="mt-2">Share it so ${esc(c.teamName)} can use and filter by it.</p>`,
+      `<button class="${btnPrimary} !py-1.5" data-act="promote" data-tag="${x.tag.id}">Share with ${S.persona==="employer"?"team":"coach"}</button>`); }).join("");
+  const table=`<div class="overflow-x-auto"><table class="min-w-full text-sm text-gray-800"><thead class="text-gray-500 border-b border-gray-200 bg-gray-50 text-left"><tr>
+     <th class="px-4 py-2 font-medium">Tag</th><th class="px-4 py-2 font-medium">Group</th><th class="px-4 py-2 font-medium">Visible to</th><th class="px-4 py-2 font-medium text-right">Here</th><th class="px-4 py-2 font-medium text-right">Org-wide</th><th class="px-4 py-2 font-medium">Last used</th></tr></thead>
+     <tbody class="divide-y divide-gray-100">${rows.map(t=>`<tr class="hover:bg-gray-50"><td class="px-4 py-2.5">${pill(t)}</td><td class="px-4 py-2.5 capitalize text-gray-600">${t.group}</td><td class="px-4 py-2.5 text-gray-600">${esc(c.scopes[t.scope])}</td>
+       <td class="px-4 py-2.5 text-right tabular-nums">${itemCount(t.id)}</td><td class="px-4 py-2.5 text-right tabular-nums">${t.base+itemCount(t.id)}</td>
+       <td class="px-4 py-2.5 ${t.last>=90?"text-red-600":"text-gray-600"}">${t.last===0?"Today":t.last===1?"Yesterday":t.last+" days ago"}</td></tr>`).join("")}</tbody></table></div>`;
+  return `<section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm flex flex-col gap-4">
+    <div><h2 class="text-lg font-semibold text-gray-800">${c.hygieneTab}</h2><p class="text-sm text-gray-500">Keeps the tag list short so suggestions stay accurate.</p></div>${tabs}
+    ${S.hyTab==="review"?(issues.length?`<div class="grid gap-5" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">${cards}</div>`:`<p class="text-sm text-gray-500 py-6 text-center">Nothing to review. Duplicates, unused tags and popular personal tags show up here.</p>`):`<div class="-mx-5 -mb-5 border-t border-gray-200">${table}</div>`}</section>`; }
+
+/* ---------- Insights: KPI cards ---------- */
+function median(a){ if(!a.length) return null; const s=a.slice().sort((x,y)=>x-y),m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; }
+function kpi(icon,bg,fg,label,value,note,noteCls){ return `<div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"><div class="flex items-start gap-4">
+  <div class="p-2 rounded-full ${bg} ${fg} flex-none">${ic(icon,"w-5 h-5")}</div><div class="min-w-0"><p class="text-sm font-medium ${fg.replace("600","700")}">${label}</p>
+  <p class="text-2xl font-bold text-gray-900 tabular-nums">${value}</p><p class="text-xs ${noteCls||"text-gray-500"} mt-1">${note}</p></div></div></div>`; }
+function insightsView(){ const c=C(), ev=S.events.filter(e=>e.persona===S.persona), ap=ev.filter(e=>e.type==="tag_applied");
+  const sug=ap.filter(e=>e.source==="suggestion").length, cr=ev.filter(e=>e.type==="tag_created").length,
+    rec=ev.filter(e=>e.type==="filter_used"||e.type==="view_opened").length, op=ev.filter(e=>e.type==="picker_opened").length,
+    med=median(ap.map(e=>e.ms).filter(x=>x!=null)), und=ev.filter(e=>e.type==="tag_undo"||e.type==="tag_removed").length;
+  const pct=(a,b)=>b?Math.round(a/b*100)+"%":"–";
+  const top=active().map(t=>({t,n:itemCount(t.id)})).filter(x=>x.n).sort((a,b)=>b.n-a.n).slice(0,7), max=Math.max(1,...top.map(x=>x.n));
+  const cov=D().items.filter(i=>[...i.tags].some(id=>{const t=tagById(id);return t&&t.group==="status"&&t.state==="active";})).length;
+  return `<div class="flex flex-col gap-4"><div><h2 class="text-lg font-semibold text-gray-800">Insights</h2><p class="text-sm text-gray-500">Measured live from what you do in this session. Targets come from the metrics plan.</p></div>
+   <div class="grid gap-4" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">
+    ${kpi("tag","bg-blue-100","text-blue-600","Tags applied",ap.length,`From ${op} picker ${plural(op,"open","opens")}`)}
+    ${kpi("sparkles","bg-purple-100","text-purple-600","From suggestions",pct(sug,ap.length),"Target 60% or more",ap.length&&sug/ap.length>=.6?"text-green-600":"text-gray-500")}
+    ${kpi("clock","bg-green-100","text-green-600","Median time to tag",med==null?"–":(med/1000).toFixed(1)+" s","Target 3 s or less",med!=null&&med<=3000?"text-green-600":"text-gray-500")}
+    ${kpi("plus","bg-yellow-100","text-yellow-600","New tags per 10",ap.length?(cr/ap.length*10).toFixed(1):"–","Lower means less clutter")}
+    ${kpi("search","bg-blue-100","text-blue-600","Recalls via tags",rec,"Filters and views opened")}
+    ${kpi("undo","bg-red-100","text-red-600","Undo or remove rate",pct(und,ap.length),"Guardrail 10% or less")}
+   </div>
+   <div class="grid gap-4" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+    <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"><h3 class="text-sm font-semibold text-gray-800">Tags in use</h3><p class="text-xs text-gray-500 mb-4">${c.nouns[0].toUpperCase()+c.nouns.slice(1)} per tag · ${cov} of ${D().items.length} have a status tag</p>
+      <div class="flex flex-col gap-2.5">${top.map(x=>`<div class="grid items-center gap-3" style="grid-template-columns:140px minmax(0,1fr) 24px"><span class="min-w-0 truncate">${pill(x.t)}</span><div class="h-2 rounded-full bg-gray-100 overflow-hidden"><div class="h-full rounded-full bg-blue-600" style="width:${x.n/max*100}%"></div></div><span class="text-sm text-right tabular-nums text-gray-700">${x.n}</span></div>`).join("")}</div></section>
+    <section class="rounded-xl border border-gray-200 bg-white shadow-sm"><div class="p-5 pb-3"><h3 class="text-sm font-semibold text-gray-800">Activity</h3><p class="text-xs text-gray-500">Who tagged what</p></div>
+      <ul class="divide-y divide-gray-100 border-t border-gray-100">${D().feed.slice(0,6).map(f=>`<li class="px-5 py-2.5 flex justify-between gap-3 text-sm"><span class="text-gray-700 min-w-0">${esc(f.text)}</span><span class="text-xs text-gray-500 whitespace-nowrap">${esc(f.when)}</span></li>`).join("")}</ul></section>
+   </div></div>`; }
+
+/* ---------- Tag picker: the library's multi-select dropdown with tag pills ---------- */
+function openPicker(mode,ids,anchor){
+  let pos=null; if(anchor){ const r=anchor.getBoundingClientRect(), s=screen.getBoundingClientRect();
+    let left=r.left-s.left, top=r.bottom-s.top+6; left=Math.max(12,Math.min(left,s.width-372)); if(top+440>s.height-12) top=Math.max(12,r.top-s.top-446); pos={left,top}; }
+  S.picker={mode,targets:ids,query:"",hi:0,openedAt:Date.now(),scope:"personal",opts:[],pos};
+  log("picker_opened",{mode,n:ids.length}); if(mode==="tag") markDone("open");
+  renderPicker(); if(mode==="filter") renderBody();
+  setTimeout(()=>{ const i=document.getElementById("pickerInput"); if(i) i.focus(); },20); }
+function closePicker(){ S.picker=null; renderPicker(); renderBody(); }
+function renderPicker(){ const ov=document.getElementById("overlay"); if(!ov) return; const p=S.picker; if(!p){ ov.innerHTML=""; return; }
+  const c=C(); const title=p.mode==="filter"?`Filter ${c.nouns} by tag`:p.targets.length>1?`Tag ${p.targets.length} ${c.nouns}`:`Tag ${esc(D().items.find(i=>i.id===p.targets[0]).name)}`;
+  const posStyle=p.pos?`left:${p.pos.left}px;top:${p.pos.top}px`:`left:50%;top:80px;transform:translateX(-50%)`;
+  ov.innerHTML=`<div class="scrim absolute inset-0 z-20 bg-gray-900/30 ${p.pos?"hidden":""}" data-act="close-picker"></div>
+   <div class="picker bg-white border border-gray-200 rounded-md shadow-md flex flex-col" style="${posStyle}" role="dialog" aria-modal="true" aria-label="${p.mode==="filter"?"Filter by tag":"Tag picker"}">
+    <div class="only-mobile justify-center pt-2"><span class="w-10 h-1 rounded-full bg-gray-300"></span></div>
+    <div class="flex items-center justify-between px-4 pt-3"><p class="text-sm font-semibold text-gray-800 truncate">${title}</p>
+      <button class="text-gray-400 hover:text-gray-700" data-act="close-picker" aria-label="Close">${ic("x","w-4 h-4")}</button></div>
+    <div class="px-4 pt-2 pb-3 border-b border-gray-200">
+      <div class="border border-blue-600 rounded-md px-3 py-2 flex flex-wrap items-center gap-2 bg-white">
+        <span id="pickerPills" class="contents"></span>
+        <input id="pickerInput" type="text" autocomplete="off" spellcheck="false" placeholder="${p.mode==="filter"?"Search tags…":"Search or create…"}" class="flex-1 min-w-[90px] text-sm text-gray-700 focus:outline-none" aria-label="Search tags">
+        <span class="text-blue-600">${ic("up","w-4 h-4")}</span></div></div>
+    <div id="pickerBody" class="overflow-y-auto flex-1 py-1" role="listbox" aria-multiselectable="true"></div>
+    <div class="flex items-center justify-between gap-3 px-4 py-3 border-t border-gray-200 bg-gray-50 rounded-b-md">
+      <span class="text-xs text-gray-500" id="pickerHint"></span><button class="${btnPrimary} !py-1.5" data-act="close-picker">Done</button></div>
+   </div>`;
+  renderPickerBody(); }
+function pickerData(){ const p=S.picker, items=D().items.filter(i=>p.targets.includes(i.id));
+  if(p.mode==="filter"){ const on=new Set(S.filters);
+    const list=p.query?search(p.query,null):active().filter(t=>itemCount(t.id)).sort((a,b)=>itemCount(b.id)-itemCount(a.id)).slice(0,10).map(t=>({tag:t,source:"filter"}));
+    return {sections:[[p.query?"Matches":"Tags in this list",list.map(o=>Object.assign(o,{why:`${itemCount(o.tag.id)} ${plural(itemCount(o.tag.id),C().noun,C().nouns)}`,on:on.has(o.tag.id)}))]]}; }
+  const onAll=new Set(active().filter(t=>items.every(i=>i.tags.has(t.id))).map(t=>t.id));
+  if(!p.query) return {sections:[["Smart suggestions",suggest(p.targets).map(o=>Object.assign(o,{on:false}))]],applied:[...onAll]};
+  const res=search(p.query,null).map(o=>Object.assign(o,{on:onAll.has(o.tag.id)}));
+  const exact=res.some(r=>norm(r.tag.name)===norm(p.query)||r.tag.aliases.some(a=>norm(a)===norm(p.query)));
+  const dup=!exact?nearDuplicate(p.query):null;
+  return {sections:[["Matches",res]],create:exact?null:slug(p.query),dup:dup?dup.tag:null,applied:[...onAll]}; }
+function renderPickerBody(){ const p=S.picker; if(!p) return; const box=document.getElementById("pickerBody"); if(!box) return;
+  const d=pickerData(), flat=[]; let h="";
+  const pills=p.mode==="filter"?S.filters.map(id=>pill(tagById(id),{remove:"filter-remove-p"})):(d.applied||[]).map(id=>pill(tagById(id),{remove:"remove-in-picker"}));
+  document.getElementById("pickerPills").innerHTML=pills.join("");
+  if(d.dup){ markDone("dup"); h+=`<div class="mx-4 my-2 flex items-start gap-2 bg-yellow-50 border border-yellow-300 rounded-md px-3 py-2 text-sm text-yellow-900">${ic("warn","w-4 h-4 flex-none mt-0.5 text-yellow-600")}<span>“${esc(p.query)}” looks like <b>${esc(d.dup.name)}</b>. Use the existing tag so there is one tag per idea.</span></div>`; }
+  for(const [title,list] of d.sections){
+    const ai=title==="Smart suggestions";
+    h+=`<div class="px-4 pt-2 pb-1 flex items-center justify-between text-xs font-medium uppercase tracking-wider ${ai?"text-purple-600":"text-gray-500"}"><span class="flex items-center gap-1.5">${ai?ic("sparkles","w-3.5 h-3.5"):""}${title}</span>${ai?`<span class="normal-case tracking-normal font-normal text-gray-400">Up to 5</span>`:""}</div>`;
+    if(!list.length&&!d.create) h+=`<p class="px-4 py-3 text-sm text-gray-500">${ai?"No suggestions yet. Type to search.":"No tags match."}</p>`;
+    list.forEach(o=>{ const i=flat.length; flat.push({kind:"tag",o,rank:i+1});
+      if(o.why&&o.why.startsWith("Synonym")) markDone("alias");
+      h+=`<button class="opt w-full flex items-center gap-3 px-4 py-2 text-left ${p.hi===i?"bg-blue-50":"hover:bg-gray-50"}" id="opt-${i}" role="option" aria-selected="${o.on}" data-act="pick" data-i="${i}">
+        <span class="cb ${o.on?"on":""}"></span>${pill(o.tag)}<span class="ml-auto text-xs ${ai?"text-purple-600":"text-gray-500"} text-right truncate min-w-0">${esc(o.why||C().scopes[o.tag.scope])}</span></button>`; }); }
+  if(d.create&&p.mode==="tag"){ const i=flat.length; flat.push({kind:"create",name:d.create});
+    h+=`<div class="mx-4 mt-2 mb-1 border border-dashed border-gray-300 rounded-md p-3 flex flex-col gap-2">
+      <button class="opt flex items-center gap-2 text-sm text-left rounded ${p.hi===i?"text-blue-700 font-semibold":"text-blue-600 font-medium"}" id="opt-${i}" data-act="pick" data-i="${i}">${ic("plus","w-4 h-4")}${d.dup?"Create anyway:":"Create"} “${esc(d.create)}”</button>
+      <div class="flex items-center gap-4 text-sm text-gray-700" role="radiogroup" aria-label="Who can see the new tag">${["personal","team"].map(s=>`<label class="flex items-center gap-2 cursor-pointer"><input type="radio" class="custom-radio" name="newScope" data-act="scope" data-scope="${s}" ${p.scope===s?"checked":""}>${esc(C().scopes[s])}</label>`).join("")}</div></div>`; }
+  box.innerHTML=h; p.opts=flat; if(p.hi>=flat.length) p.hi=Math.max(0,flat.length-1);
+  document.getElementById("pickerHint").textContent=p.mode==="filter"?"Filters combine: all must match":p.targets.length>1?`Applies to all ${p.targets.length} selected`:"Saved instantly · Esc to close"; }
+function choose(i){ const p=S.picker, f=p.opts[i]; if(!f) return;
+  if(p.mode==="filter"){ const id=f.o.tag.id; S.filters.includes(id)?S.filters=S.filters.filter(x=>x!==id):(S.filters.push(id),log("filter_used",{tag:f.o.tag.name}),markDone("filter")); renderBody(); renderPickerBody(); return; }
+  if(f.kind==="create"){ const t=createTag(f.name,p.scope); if(t) applyTag(t.id,p.targets,"create",null); }
+  else if(f.o.on) removeTag(p.targets,f.o.tag.id);
+  else applyTag(f.o.tag.id,p.targets,f.o.source==="suggestion"?"suggestion":"search",f.rank);
+  p.query=""; p.hi=0; const inp=document.getElementById("pickerInput"); if(inp){ inp.value=""; inp.focus(); }
+  renderPickerBody(); renderBody(); }
+
+function renderToast(){ const slot=document.getElementById("toastSlot"); if(!slot) return; const t=S.toast;
+  slot.innerHTML=t?`<div class="alert-slot"><div class="alert-in relative w-[340px] bg-green-100 border border-green-300 rounded-lg px-5 py-4 shadow-sm overflow-hidden" role="status">
+    <div class="flex items-start justify-between gap-3"><div class="flex items-start gap-3"><div class="bg-green-500 text-white rounded-full w-8 h-8 flex-none grid place-items-center">${ic("check","w-4 h-4")}</div>
+      <div><h4 class="text-sm font-semibold text-green-900">${t.title}</h4><p class="text-sm text-gray-700 mt-0.5">${t.msg}</p>${S.undo?`<button class="${link} mt-1" data-act="undo">Undo</button>`:""}</div></div>
+      <button class="text-green-700 hover:text-green-900" data-act="dismiss" aria-label="Dismiss">${ic("x","w-4 h-4")}</button></div><div class="loading-line"></div></div></div>`:""; }
+function renderTasks(){ document.getElementById("tasks").innerHTML=C().tasks.map(([k,h])=>{ const d=S.done[S.persona].has(k);
+  return `<li class="flex items-start gap-3"><span class="cb ${d?"on":""} mt-0.5" aria-hidden="true"></span><span class="${d?"text-gray-400 line-through":""}">${h}</span></li>`; }).join(""); }
+
+/* ---------- events ---------- */
+screen.addEventListener("click",e=>{ const a=e.target.closest("[data-act]"); if(!a) return; const act=a.dataset.act;
+  if(act==="tab"){ S.tab=a.dataset.tab; S.picker=null; renderApp(); return; }
+  if(act==="open-tag"){ openPicker("tag",[a.dataset.item],S.device==="desktop"?a:null); return; }
+  if(act==="open-bulk"){ openPicker("tag",[...S.selected],S.device==="desktop"?a:null); return; }
+  if(act==="open-filter"){ openPicker("filter",[],S.device==="desktop"?a.parentElement:null); return; }
+  if(act==="close-picker"){ closePicker(); return; }
+  if(act==="pick"){ choose(+a.dataset.i); return; }
+  if(act==="scope"){ S.picker.scope=a.dataset.scope; return; }
+  if(act==="remove-in-picker"){ removeTag(S.picker.targets,a.dataset.tag); renderPickerBody(); renderBody(); return; }
+  if(act==="filter-remove-p"){ S.filters=S.filters.filter(x=>x!==a.dataset.tag); renderPickerBody(); renderBody(); return; }
+  if(act==="filter-add"){ if(!S.filters.includes(a.dataset.tag)) S.filters.push(a.dataset.tag); log("filter_used",{tag:tagById(a.dataset.tag).name}); markDone("filter"); renderBody(); return; }
+  if(act==="filter-remove"){ S.filters=S.filters.filter(x=>x!==a.dataset.tag); renderBody(); return; }
+  if(act==="save-view"){ const nm=S.filters.map(id=>tagById(id).name).join(" + "); D().views.push({name:nm,desc:"Saved from a filter",all:S.filters.slice(),shared:false}); log("view_saved",{}); toast("View saved",`“${esc(nm)}” is in Smart views.`,null); renderBody(); return; }
+  if(act==="open-view"){ const v=D().views[+a.dataset.view]; S.filters=v.all.slice(); S.tab="items"; log("view_opened",{name:v.name}); markDone("filter"); renderApp(); return; }
+  if(act==="sel"){ a.checked?S.selected.add(a.dataset.item):S.selected.delete(a.dataset.item); renderBody(); return; }
+  if(act==="sel-all"){ const ids=visible().map(i=>i.id); a.checked?ids.forEach(i=>S.selected.add(i)):ids.forEach(i=>S.selected.delete(i)); renderBody(); return; }
+  if(act==="clear-sel"){ S.selected.clear(); renderBody(); return; }
+  if(act==="hytab"){ S.hyTab=a.dataset.hy; renderBody(); return; }
+  if(act==="merge"){ mergeTag(a.dataset.from,a.dataset.into); rerenderShell(); return; }
+  if(act==="archive"){ const t=tagById(a.dataset.tag); t.state="archived"; log("tag_archived",{tag:t.name}); toast("Tag archived",`${esc(t.name)} no longer appears in suggestions.`,null); rerenderShell(); return; }
+  if(act==="promote"){ const t=tagById(a.dataset.tag); t.scope="team"; t.group="priority"; log("tag_promoted",{tag:t.name}); D().feed.unshift({text:`You shared ${t.name} with ${C().teamName}`,when:"Just now"}); toast("Tag shared",`${esc(t.name)} is now visible to ${esc(C().teamName)}.`,null); rerenderShell(); return; }
+  if(act==="undo"){ doUndo(); return; }
+  if(act==="dismiss"){ S.toast=null; renderToast(); return; }
+});
+screen.addEventListener("input",e=>{ if(e.target.id==="pickerInput"){ S.picker.query=e.target.value; S.picker.hi=0; renderPickerBody(); }
+  if(e.target.id==="gridSearch"){ S.q=e.target.value; const pos=e.target.selectionStart; renderBody(); const g=document.getElementById("gridSearch"); g.focus(); g.setSelectionRange(pos,pos); } });
+screen.addEventListener("keydown",e=>{ if(e.target.id!=="pickerInput") return; const p=S.picker; if(!p) return;
+  const mv=d=>{ e.preventDefault(); p.hi=Math.max(0,Math.min(p.hi+d,p.opts.length-1)); renderPickerBody(); const o=document.getElementById("opt-"+p.hi); if(o) o.scrollIntoView({block:"nearest"}); };
+  if(e.key==="ArrowDown") mv(1); else if(e.key==="ArrowUp") mv(-1);
+  else if(e.key==="Enter"){ e.preventDefault(); choose(p.hi); }
+  else if(e.key==="Escape"){ e.preventDefault(); closePicker(); }
+  else if(e.key==="Backspace"&&!p.query&&p.mode==="tag"){ const d=pickerData(); const last=(d.applied||[]).pop(); if(last){ removeTag(p.targets,last); renderPickerBody(); renderBody(); } } });
+screen.addEventListener("mouseover",e=>{ const r=e.target.closest("[data-row]"); if(r) S.hover=r.dataset.row; });
+document.addEventListener("keydown",e=>{ if(S.picker||e.target.closest("input,textarea")) return;
+  if((e.key==="t"||e.key==="T")&&S.tab==="items"){ const ids=S.selected.size?[...S.selected]:(S.hover?[S.hover]:[]); if(ids.length){ e.preventDefault(); openPicker("tag",ids,null); } } });
+document.addEventListener("click",e=>{ if(S.picker&&S.picker.pos&&!e.target.closest(".picker")&&!e.target.closest("[data-act^='open-']")&&!e.target.closest("[data-act='remove-in-picker'],[data-act='filter-remove-p']")&&e.target.isConnected) closePicker(); });
+
+function segStyle(group,attr,val){ document.querySelectorAll(group+" button").forEach(b=>{ const on=b.dataset[attr]===val; b.setAttribute("aria-pressed",on); b.className="seg px-3 py-1 rounded "+(on?"bg-white text-blue-600 shadow-sm":"text-gray-700 hover:text-blue-600"); }); }
+document.getElementById("devSeg").addEventListener("click",e=>{ const b=e.target.closest("[data-dev]"); if(!b) return; S.device=b.dataset.dev;
+  document.getElementById("device").dataset.device=S.device; segStyle("#devSeg","dev",S.device); log("device_switched",{}); if(S.picker) closePicker(); if(S.device==="mobile") markDone("device"); });
+document.getElementById("perSeg").addEventListener("click",e=>{ const b=e.target.closest("[data-per]"); if(!b) return;
+  S.persona=b.dataset.per; S.tab="items"; S.filters=[]; S.q=""; S.selected.clear(); S.picker=null; S.toast=null; segStyle("#perSeg","per",S.persona); renderApp(); renderTasks(); });
+function layoutGuide(){ const l=document.querySelector(".layout"); l.style.gridTemplateColumns=window.innerWidth>=1180?"minmax(0,1fr) 300px":"minmax(0,1fr)"; }
+window.addEventListener("resize",layoutGuide);
+
+/* deep links for demos and screenshots: #shot #tablet #mobile #seeker #picker #js #dup #bulk #hygiene #insights #views */
+function boot(){ const h=(location.hash||"").slice(1).split("-");
+  if(h.includes("shot")) document.documentElement.classList.add("shot");
+  if(h.includes("seeker")) S.persona="seeker";
+  for(const d of ["tablet","mobile"]) if(h.includes(d)){ S.device=d; document.getElementById("device").dataset.device=d; }
+  segStyle("#devSeg","dev",S.device); segStyle("#perSeg","per",S.persona); layoutGuide();
+  if(h.includes("insights")) S.tab="insights"; else if(h.includes("hygiene")) S.tab="hygiene"; else if(h.includes("views")) S.tab="views";
+  renderApp(); renderTasks();
+  if(h.includes("insights")){ const ids=D().items.map(i=>i.id); for(let k=0;k<4;k++) log("picker_opened",{mode:"tag",n:1});
+    [[0,1,2100,"suggestion"],[3,3,2800,"suggestion"],[6,5,4300,"search"]].forEach(([t,i,ms,src])=>{ S.picker={openedAt:Date.now()-ms}; applyTag(active()[t].id,[ids[i]],src,1); });
+    S.picker=null; log("filter_used",{}); log("view_opened",{}); S.toast=null; renderBody(); renderToast(); }
+  if(h.includes("bulk")){ D().items.slice(0,3).forEach(i=>S.selected.add(i.id)); renderBody(); }
+  if(h.includes("picker")){ const btn=S.device==="desktop"?screen.querySelector('[data-act="open-tag"]'):null; openPicker("tag",[D().items[0].id],btn);
+    const q=h.includes("js")?(S.persona==="seeker"?"wfh":"js"):h.includes("dup")?(S.persona==="seeker"?"dreamjb":"frontnd"):"";
+    if(q){ S.picker.query=q; document.getElementById("pickerInput").value=q; renderPickerBody(); } }
+  if(h.includes("toast")) toast("Tag added","strong-yes added to Sofia Martins.",{type:"apply",tagId:active()[3].id,ids:[]});
+}
+boot();
+})();
+</script>
+</body>
+</html>
