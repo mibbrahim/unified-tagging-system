@@ -4,6 +4,8 @@ An interactive prototype for a Product Manager case study: a scalable tagging sy
 
 **Live prototype:** https://mibbrahim.github.io/unified-tagging-system/
 
+**Case study deck (PDF, 32 slides):** [Unified-Tagging-System-Case-Study.pdf](Unified-Tagging-System-Case-Study.pdf). It covers research, personas, design, architecture, metrics, user testing and scalability testing.
+
 ![Tag picker with smart suggestions on desktop](screenshots/desktop-suggestions.png)
 
 ## What the prototype shows
