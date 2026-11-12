@@ -233,6 +233,8 @@ const PERSONAS={
    {name:"Silver medalists",desc:"Strong runners-up for the next req",all:["silver-medalist"],shared:true}],
   feed:[["Marcus tagged Omar Haddad strong-yes","Yesterday"],["Priya merged frontend-dev into frontend","3 days ago"],["Priya created team tag revisit-q3","Last week"]],
   tasks:[["open","Click <b>Add tag</b> on Alex Morgan. Suggestions come from the CV and from what the team tags together."],
+   ["ai","Click <b>AI auto-tag</b>. AI reads the CVs and suggests tags. Accept one, or all."],
+   ["aisearch","In the search box type <b>remote react</b>, then click <b>Show these</b>."],
    ["alias","Type <b>js</b>. It finds the existing <b>javascript</b> tag instead of creating a new one."],
    ["dup","Type <b>frontnd</b>. You are warned it looks like <b>frontend</b>."],
    ["blocked","Type <b>too old</b> and try to create it. Tags about age, gender or religion are blocked."],
@@ -241,7 +243,8 @@ const PERSONAS={
    ["undo","Use <b>Undo</b> on any confirmation."],
    ["merge","Open <b>Tag hygiene</b> and merge a duplicate."],
    ["device","Switch to <b>Mobile</b> and tag someone from the bottom sheet."],
-   ["insights","Open <b>Insights</b> to see this session measured."]]},
+   ["insights","Open <b>Insights</b> to see this session measured."],
+   ["speed","In Insights, click <b>Run speed test</b>."]]},
  seeker:{ app:"Job seeker", title:"My job search", sub:"Shared with my coach: Maya R., university career services",
   noun:"job", nouns:"jobs", itemsTab:"Saved jobs", cols:["Job","Status","Tags"], teamName:"your coach", avatars:["ME","MR"],
   scopes:{platform:"Platform",team:"Shared with coach",personal:"Only me"}, contentWhy:"From job post", hygieneTab:"Tidy up", share:"Share with coach",
@@ -261,6 +264,7 @@ const PERSONAS={
    {name:"For Maya to review",desc:"Shared with your coach",all:["coach-review"],shared:true}],
   feed:[["Maya commented on Frontend Engineer · Blue Harbor Health","2 hours ago"],["applied was added automatically when you applied to Meridian Bank","4 days ago"]],
   tasks:[["open","Click <b>Add tag</b> on a job. Suggestions come from the job post and your habits."],
+   ["ai","Click <b>AI auto-tag</b>. AI reads the job posts and suggests tags."],
    ["alias","Type <b>wfh</b>. It finds the platform tag <b>remote</b>."],
    ["dup","Type <b>dreamjb</b>. You are steered to <b>dream-job</b>."],
    ["filter","Click a tag to filter, then save it as a view."],
@@ -277,12 +281,13 @@ function build(p){ const c=PERSONAS[p];
     views:c.views.map(v=>({name:v.name,desc:v.desc,all:v.all.map(n=>by[n].id),shared:v.shared})),
     feed:c.feed.map(f=>({text:f[0],when:f[1]})),recent:[]}; }
 
-const S={persona:"employer",device:"desktop",phone:false,tab:"items",hyTab:"review",filters:[],q:"",selected:new Set(),picker:null,hover:null,
+const S={aiOn:false,tip:true,perf:null,persona:"employer",device:"desktop",phone:false,tab:"items",hyTab:"review",filters:[],q:"",selected:new Set(),picker:null,hover:null,
   events:[],alerts:[],flash:new Set(),done:{employer:new Set(),seeker:new Set()},db:{employer:build("employer"),seeker:build("seeker")}};
 const D=()=>S.db[S.persona], C=()=>D().cfg;
 const tagById=id=>D().tags.find(t=>t.id===id);
 const active=()=>D().tags.filter(t=>t.state==="active");
-const itemCount=id=>D().items.filter(i=>i.tags.has(id)).length;
+let CNT=null; /* tag -> count index, rebuilt only after a change */
+const itemCount=id=>{ if(!CNT){ CNT=new Map(); for(const i of D().items) for(const t of i.tags) CNT.set(t,(CNT.get(t)||0)+1); } return CNT.get(id)||0; };
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 const plural=(n,a,b)=>n===1?a:b;
 function log(type,data){ S.events.push(Object.assign({type,persona:S.persona,device:S.device,at:Date.now()},data||{})); }
@@ -342,6 +347,23 @@ function mergeTag(fromId,intoId){ const snap=snapshot(), f=tagById(fromId),t=tag
   log("tag_merged",{from:f.name,into:t.name}); D().feed.unshift({text:`You merged ${f.name} into ${t.name}`,when:"Just now"});
   markDone("merge"); alertMsg("success","Tags merged",`<b>${esc(f.name)}</b> now points to <b>${esc(t.name)}</b>. Searching “${esc(f.name)}” still finds it.`,snap); }
 
+/* ---------- AI helpers (AI suggests, a person decides) ---------- */
+function aiFor(it){ return it.skills.map(sk=>active().find(t=>norm(t.name)===norm(sk)||t.aliases.some(a=>norm(a)===norm(sk)))).filter(t=>t&&!it.tags.has(t.id)).slice(0,2); }
+function aiParse(q){ const w=q.toLowerCase().split(/[^a-z0-9+.#]+/).filter(Boolean), ids=[];
+  const find=x=>active().find(t=>norm(t.name)===norm(x)||t.aliases.some(a=>norm(a)===norm(x)));
+  for(let i=0;i<w.length;i++){ let t=i+1<w.length?find(w[i]+w[i+1]):null; if(t) i++; else t=w[i].length>1?find(w[i]):null; if(t&&!ids.includes(t.id)&&!S.filters.includes(t.id)) ids.push(t.id); }
+  return ids; }
+const aiSrc=()=>S.persona==="employer"?"CVs":"job posts";
+/* ---------- speed test: 5,000 tags and 10,000 items, in this browser ---------- */
+function perfTest(){ const T=5000,N=10000,base=["react","remote","java","sales","arabic","finance","design","senior","nurse","driver","python","manager","legal","cloud","retail","admin"];
+  const tags=[]; for(let i=0;i<T;i++) tags.push({name:base[i%base.length]+"-"+i,aliases:[]});
+  const idx=new Map(); const put=(t,i)=>{ let s=idx.get(t); if(!s) idx.set(t,s=new Set()); s.add(i); };
+  for(let i=0;i<N;i++){ for(let k=0;k<3;k++) if(i%(k+2)===0) put(k,i); for(let k=3;k<8;k++) put((i*31+k*977)%T,i); }
+  const time=(fn,r)=>{ const t0=performance.now(); let out; for(let i=0;i<r;i++) out=fn(); return [(performance.now()-t0)/r,out]; };
+  const [sMs]=time(()=>["rea","java-12","frontnd"].map(q=>tags.filter(t=>matchTag(t,q)).length),5);
+  const [fMs,hits]=time(()=>{ const sets=[0,1,2].map(t=>idx.get(t)).sort((a,b)=>a.size-b.size); let n=0; for(const i of sets[0]) if(sets[1].has(i)&&sets[2].has(i)) n++; return n; },20);
+  return {search:sMs/3,filter:fMs,hits}; }
+
 /* ---------- alerts: the library's four semantic types, in a slim toast / inline style ---------- */
 const AL={
  success:{chip:"bg-green-100 text-green-600",line:"bg-green-500",icon:"check",role:"status",soft:"bg-green-50 ring-green-200",t:"text-green-900",m:"text-green-800"},
@@ -387,7 +409,7 @@ const sortTags=ids=>[...ids].map(tagById).filter(t=>t&&t.state==="active").sort(
 /* ---------- app shell ---------- */
 const screen=document.getElementById("screen");
 const TABS=()=>[["items",C().itemsTab,S.persona==="employer"?"users":"briefcase"],["views","Smart views","bookmark"],["hygiene",C().hygieneTab,"broom"],["insights","Insights","chart"]];
-function renderApp(){ const issues=hygieneIssues().length;
+function renderApp(){ CNT=null; const issues=hygieneIssues().length;
   screen.innerHTML=`
    <div class="bg-white border-b border-gray-200 flex-none">
      <div class="flex items-center justify-between gap-3 px-5 h-14">
@@ -402,21 +424,28 @@ function renderApp(){ const issues=hygieneIssues().length;
    <div id="overlay"></div><div id="alertSlot"></div>`;
   renderBody(); renderPicker(); renderAlerts();
 }
-function renderBody(){ const b=document.getElementById("body"); if(!b) return;
+function renderBody(){ CNT=null; const b=document.getElementById("body"); if(!b) return;
   b.innerHTML = S.tab==="items"?itemsView():S.tab==="views"?viewsView():S.tab==="hygiene"?hygieneView():insightsView();
   S.flash.clear(); if(S.tab==="insights") markDone("insights"); }
 
 /* ---------- items: Advance Search Grid ---------- */
 function visible(){ const q=S.q.trim().toLowerCase(); return D().items.filter(i=>S.filters.every(f=>i.tags.has(f))&&(!q||(i.name+" "+i.meta).toLowerCase().includes(q))); }
-function tagCell(it){ return `${sortTags(it.tags).map(t=>pill(t,{filter:true})).join("")}<button class="inline-flex items-center gap-1 ${link} min-h-[28px]" data-act="open-tag" data-item="${it.id}" aria-label="Add tag to ${esc(it.name)}">${ic("plus","w-3.5 h-3.5")}Add tag</button>`; }
+function tagCell(it){ const ghosts=S.aiOn?aiFor(it).map(t=>`<button class="pop inline-flex items-center gap-1 text-sm px-2 py-0.5 rounded-full whitespace-nowrap border border-dashed border-purple-400 text-purple-700 bg-purple-50 hover:bg-purple-100" data-act="ai-accept" data-item="${it.id}" data-tag="${t.id}" title="AI suggestion. Click to accept">${ic("sparkles","w-3 h-3")}${esc(t.name)}</button>`).join(""):"";
+  return `${sortTags(it.tags).map(t=>pill(t,{filter:true})).join("")}${ghosts}<button class="inline-flex items-center gap-1 ${link} min-h-[28px]" data-act="open-tag" data-item="${it.id}" aria-label="Add tag to ${esc(it.name)}">${ic("plus","w-3.5 h-3.5")}Add tag</button>`; }
 function itemsView(){ const c=C(), list=visible(), n=S.selected.size;
+  const aiN=S.aiOn?D().items.reduce((a,it)=>a+aiFor(it).length,0):0, aiM=S.aiOn?D().items.filter(it=>aiFor(it).length).length:0, aiIds=S.q?aiParse(S.q):[];
+  const note=(body)=>`<div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md px-3 py-2.5 ring-1 ring-inset bg-purple-50 ring-purple-200 text-sm text-purple-900 enter">${ic("sparkles","w-4 h-4 flex-none text-purple-600")}${body}</div>`;
+  const purpleBtn="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-1 rounded-full";
+  const extra=(S.tip?`<div class="mb-3 flex items-start gap-2.5 rounded-md px-3 py-2.5 ring-1 ring-inset bg-blue-50 ring-blue-200 text-sm text-blue-900">${ic("infoc","w-4 h-4 flex-none mt-0.5")}<span class="flex-1">Tip: click any tag to filter the list. Tick rows to tag many at once. Try <b>AI auto-tag</b> to let AI read the ${aiSrc()}.</span><button class="text-blue-700 hover:text-blue-900" data-act="tip-x" aria-label="Hide tip">${ic("x","w-4 h-4")}</button></div>`:"")
+   +(S.aiOn?note(aiN?`<span class="flex-1 min-w-[200px]">AI read the ${aiSrc()} and suggests <b>${aiN} ${plural(aiN,"tag","tags")}</b> for ${aiM} ${plural(aiM,c.noun,c.nouns)}. Click a dashed tag to accept it.</span><button class="${purpleBtn}" data-act="ai-all">Accept all</button>`:`<span class="flex-1">AI has no new tags to suggest. Everything from the ${aiSrc()} is already tagged.</span>`):"")
+   +(aiIds.length?note(`<span>AI understood:</span>${aiIds.map(id=>pill(tagById(id))).join("")}<button class="${purpleBtn}" data-act="ai-search" data-ids="${aiIds.join(",")}">Show these</button>`):"");
   const fpills=S.filters.map(id=>pill(tagById(id),{remove:"filter-remove"})).join("");
   const savedAs=D().views.find(v=>v.all.length===S.filters.length&&v.all.every(x=>S.filters.includes(x)));
   const empty=`No ${c.nouns} have ${S.filters.length>1?"all of these tags":"this tag"}${S.q?" and match your search":""}.`;
   return `<section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm enter">
     <div class="flex justify-between items-start flex-wrap gap-3 mb-4">
       <div class="min-w-0"><h2 class="text-lg font-medium text-gray-900">${esc(c.title)}</h2><p class="text-sm text-gray-500">${esc(c.sub)}</p></div>
-      ${n?`<div class="flex items-center gap-2 flex-wrap enter"><span class="text-sm text-gray-600">${n} selected</span><button class="${btnSecondary} !py-1.5" data-act="clear-sel">Clear</button><button class="${btnPrimary} !py-1.5" data-act="open-bulk">${ic("tag","w-4 h-4")}Tag ${n} ${plural(n,c.noun,c.nouns)}</button></div>`:""}
+      ${n?`<div class="flex items-center gap-2 flex-wrap enter"><span class="text-sm text-gray-600">${n} selected</span><button class="${btnSecondary} !py-1.5" data-act="clear-sel">Clear</button><button class="${btnPrimary} !py-1.5" data-act="open-bulk">${ic("tag","w-4 h-4")}Tag ${n} ${plural(n,c.noun,c.nouns)}</button></div>`:`<button class="inline-flex items-center gap-2 border border-purple-600 text-purple-700 hover:bg-purple-50 text-sm font-medium px-4 py-1.5 rounded-full bg-white transition-colors" data-act="ai-toggle" aria-pressed="${S.aiOn}">${ic("sparkles","w-4 h-4")}${S.aiOn?"Hide AI suggestions":"AI auto-tag"}</button>`}
     </div>
     <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
       <div class="flex items-center gap-3 flex-wrap min-w-0">
@@ -424,8 +453,9 @@ function itemsView(){ const c=C(), list=visible(), n=S.selected.size;
           ${ic("filter","w-3.5 h-3.5 text-gray-400")}${fpills||`<span class="text-sm text-gray-400">Filter by tags</span>`}<span class="ml-auto text-gray-500">${ic("down","w-4 h-4")}</span></button>
         ${S.filters.length?`<button class="${link}" data-act="clear-filters">Clear</button>`+(savedAs?`<span class="text-sm text-gray-500">Saved as “${esc(savedAs.name)}”</span>`:`<button class="${link}" data-act="save-view">Save as view</button>`):""}
       </div>
-      <label class="relative only-desktop"><span class="sr-only">Search ${c.nouns}</span><input id="gridSearch" type="search" value="${esc(S.q)}" placeholder="Search ${c.nouns}…" class="pl-9 pr-3 py-1.5 border border-gray-300 rounded-full text-sm w-56 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"><span class="absolute left-3 top-2 text-gray-400">${ic("search","w-4 h-4")}</span></label>
+      <label class="relative max-w-full"><span class="sr-only">Search ${c.nouns}</span><input id="gridSearch" type="search" value="${esc(S.q)}" placeholder="Search or ask AI: remote react" class="pl-9 pr-3 py-1.5 border border-gray-300 rounded-full text-sm w-64 max-w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"><span class="absolute left-3 top-2 text-gray-400">${ic("search","w-4 h-4")}</span></label>
     </div>
+    ${extra}
     <div class="grid-table overflow-x-auto -mx-5">
       <table class="min-w-full text-sm text-gray-800">
         <thead class="text-gray-500 border-y border-gray-200 bg-gray-50 text-left"><tr>
@@ -496,7 +526,7 @@ function hygieneView(){ const c=C(), issues=hygieneIssues();
        <td class="px-4 py-2.5 text-right tabular-nums">${itemCount(t.id)}</td><td class="px-4 py-2.5 text-right tabular-nums">${t.base+itemCount(t.id)}</td>
        <td class="px-4 py-2.5 whitespace-nowrap ${t.last>=90?"text-red-600":"text-gray-600"}">${t.last===0?"Today":t.last===1?"Yesterday":t.last+" days ago"}</td></tr>`).join("")}</tbody></table></div>`;
   return `<section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm flex flex-col gap-4 enter">
-    <div><h2 class="text-lg font-medium text-gray-900">${c.hygieneTab}</h2><p class="text-sm text-gray-500">Keeps the tag list short so suggestions stay accurate.</p></div>${tabs}
+    <div><h2 class="text-lg font-medium text-gray-900">${c.hygieneTab}</h2><p class="text-sm text-gray-500"><span class="inline-flex items-center gap-1 text-purple-700">${ic("sparkles","w-3.5 h-3.5")}AI scans</span> for duplicates, unused tags and popular personal tags, so the list stays short.</p></div>${tabs}
     ${S.hyTab==="review"?(issues.length?`<div class="grid gap-5" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">${cards}</div>`:`<div class="py-10 text-center"><div class="mx-auto w-10 h-10 rounded-full bg-green-100 text-green-600 grid place-items-center">${ic("check","w-5 h-5")}</div><p class="text-sm font-medium text-gray-900 mt-3">All tidy</p><p class="text-sm text-gray-500">Duplicates, unused tags and popular personal tags show up here.</p></div>`):`<div class="-mx-5 -mb-5 border-t border-gray-200">${table}</div>`}</section>`; }
 
 /* ---------- insights: KPI cards ---------- */
@@ -505,13 +535,21 @@ function kpi(icon,circle,label,lcls,value,note,ncls){ return `<div class="bg-whi
   <div class="p-2 rounded-full ${circle} flex-none">${ic(icon,"w-5 h-5")}</div><div class="min-w-0"><p class="text-sm font-medium ${lcls}">${label}</p>
   <p class="text-2xl font-bold text-gray-900 tabular-nums">${value}</p><p class="text-xs ${ncls||"text-gray-500"} mt-1">${note}</p></div></div></div>`; }
 function insightsView(){ const c=C(), ev=S.events.filter(e=>e.persona===S.persona), ap=ev.filter(e=>e.type==="tag_applied"&&e.n>0);
-  const sug=ap.filter(e=>e.source==="suggestion").length, cr=ev.filter(e=>e.type==="tag_created").length,
+  const sug=ap.filter(e=>e.source==="suggestion"||e.source==="ai").length, cr=ev.filter(e=>e.type==="tag_created").length,
     rec=ev.filter(e=>e.type==="filter_used"||e.type==="view_opened").length, op=ev.filter(e=>e.type==="picker_opened").length,
     med=median(ap.map(e=>e.ms).filter(x=>x!=null)), und=ev.filter(e=>e.type==="tag_undo"||e.type==="tag_removed").length;
   const pct=(a,b)=>b?Math.round(a/b*100)+"%":"–";
   const top=active().map(t=>({t,n:itemCount(t.id)})).filter(x=>x.n).sort((a,b)=>b.n-a.n).slice(0,7), max=Math.max(1,...top.map(x=>x.n));
   const cov=D().items.filter(i=>[...i.tags].some(id=>{const t=tagById(id);return t&&t.group==="status"&&t.state==="active";})).length;
+  const st=active().filter(t=>t.group==="status").map(t=>({t,n:itemCount(t.id)})).sort((a,b)=>b.n-a.n)[0], hy=hygieneIssues().length, pf=S.perf;
+  const sum=[st&&st.n?`${st.n} ${plural(st.n,c.noun,c.nouns)} ${plural(st.n,"is","are")} tagged <b>${esc(st.t.name)}</b>, the busiest status.`:"", D().items.length-cov?`${D().items.length-cov} have no status tag yet.`:"Every "+c.noun+" has a status tag.", hy?`${hy} tag ${plural(hy,"issue needs","issues need")} tidying.`:"The tag list is tidy.", ap.length?`${pct(sug,ap.length)} of your tags came from suggestions.`:""].filter(Boolean).join(" ");
+  const top2=`<div class="grid gap-4" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+    <section class="rounded-xl ring-1 ring-inset ring-purple-200 bg-purple-50 p-4 flex gap-3 text-sm text-purple-900"><span class="flex-none text-purple-600 mt-0.5">${ic("sparkles","w-5 h-5")}</span><div><h3 class="font-medium">AI summary</h3><p class="mt-1">${sum}</p></div></section>
+    <section class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm flex gap-3 text-sm"><span class="flex-none text-green-600 mt-0.5">${ic("clock","w-5 h-5")}</span><div class="min-w-0 flex-1"><h3 class="font-medium text-gray-900">Speed test</h3>
+      ${pf?`<p class="mt-1 text-gray-700">Search 5,000 tags as you type: <b class="tabular-nums">${pf.search.toFixed(1)} ms</b>. Filter 10,000 ${c.nouns} by 3 tags: <b class="tabular-nums">${pf.filter.toFixed(2)} ms</b> (${pf.hits.toLocaleString()} matches).</p><p class="text-xs ${pf.search<100?"text-green-600":"text-red-600"} mt-1">Target: under 100 ms. Measured in this browser just now.</p>`:`<p class="mt-1 text-gray-500">Runs the tag engine on 5,000 tags and 10,000 ${c.nouns} in this browser.</p>`}
+      <button class="${link} mt-1.5" data-act="perf-run">${pf?"Run again":"Run speed test"}</button></div></section></div>`;
   return `<div class="flex flex-col gap-4 enter"><div><h2 class="text-lg font-medium text-gray-900">Insights</h2><p class="text-sm text-gray-500">Measured live from what you do in this session. Targets come from the metrics plan.</p></div>
+   ${top2}
    <div class="grid gap-4" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">
     ${kpi("tag","bg-blue-100 text-blue-600","Tags applied","text-blue-700",ap.length,`From ${op} picker ${plural(op,"open","opens")}`)}
     ${kpi("sparkles","bg-purple-100 text-purple-600","From suggestions","text-purple-700",pct(sug,ap.length),"Target 60% or more",ap.length&&sug/ap.length>=.6?"text-green-600":"text-gray-500")}
@@ -565,7 +603,7 @@ function pickerData(){ const p=S.picker, items=D().items.filter(i=>p.targets.inc
   const blocked=!exact&&isBlocked(p.query);
   const dup=!exact&&!blocked?nearDuplicate(p.query):null;
   return {sections:[["Matches",res]],create:exact||blocked||!slug(p.query)?null:slug(p.query),dup:dup?dup.tag:null,blocked,applied:[...onAll]}; }
-function renderPickerBody(){ const p=S.picker; if(!p) return; const box=document.getElementById("pickerBody"); if(!box) return;
+function renderPickerBody(){ CNT=null; const p=S.picker; if(!p) return; const box=document.getElementById("pickerBody"); if(!box) return;
   const d=pickerData(), flat=[]; let h="";
   const pills=p.mode==="filter"?S.filters.map(id=>pill(tagById(id),{remove:"filter-remove-p"})):(d.applied||[]).map(id=>pill(tagById(id),{remove:"remove-in-picker",anim:p.lastAdded===id}));
   document.getElementById("pickerPills").innerHTML=pills.join(""); p.lastAdded=null;
@@ -624,6 +662,13 @@ screen.addEventListener("click",e=>{ const a=e.target.closest("[data-act]"); if(
   if(act==="merge"){ mergeTag(a.dataset.from,a.dataset.into); renderApp(); return; }
   if(act==="archive"){ const snap=snapshot(), t=tagById(a.dataset.tag); t.state="archived"; log("tag_archived",{tag:t.name}); alertMsg("info","Tag archived",`<b>${esc(t.name)}</b> no longer appears in suggestions.`,snap); renderApp(); return; }
   if(act==="promote"){ const snap=snapshot(), t=tagById(a.dataset.tag); t.scope="team"; t.group="priority"; log("tag_promoted",{tag:t.name}); D().feed.unshift({text:`You shared ${t.name} with ${C().teamName}`,when:"Just now"}); alertMsg("success","Tag shared",`<b>${esc(t.name)}</b> is now visible to ${esc(C().teamName)}.`,snap); renderApp(); return; }
+  if(act==="ai-toggle"){ S.aiOn=!S.aiOn; if(S.aiOn) markDone("ai"); renderBody(); return; }
+  if(act==="ai-accept"){ applyTag(a.dataset.tag,[a.dataset.item],"ai",1); renderBody(); return; }
+  if(act==="ai-all"){ const snap=snapshot(); let n=0,m=0; D().items.forEach(it=>{ const p=aiFor(it); if(p.length){ m++; S.flash.add(it.id); p.forEach(t=>{ it.tags.add(t.id); n++; log("tag_applied",{tag:t.name,source:"ai",n:1,ms:null}); }); } });
+    S.aiOn=false; D().feed.unshift({text:`AI tagged ${m} ${C().nouns} from the ${aiSrc()} (you approved)`,when:"Just now"}); alertMsg("success","AI tags added",`${n} tags added to ${m} ${C().nouns} from the ${aiSrc()}.`,snap); renderBody(); return; }
+  if(act==="ai-search"){ a.dataset.ids.split(",").forEach(id=>{ if(!S.filters.includes(id)) S.filters.push(id); }); S.q=""; log("filter_used",{tag:"ai-search"}); markDone("aisearch"); markDone("filter"); renderBody(); return; }
+  if(act==="tip-x"){ S.tip=false; renderBody(); return; }
+  if(act==="perf-run"){ S.perf=perfTest(); markDone("speed"); renderBody(); return; }
   if(act==="undo"){ const al=S.alerts.find(x=>x.id===+a.dataset.alert); if(al&&al.snap){ restore(al.snap); log("tag_undo",{}); markDone("undo"); dismiss(al.id); alertMsg("info","Undone","Your last change was reversed."); renderApp(); } return; }
   if(act==="dismiss"){ dismiss(+a.dataset.alert); return; }
 });
@@ -647,7 +692,7 @@ document.addEventListener("click",e=>{ if(S.picker&&S.picker.pos&&e.target.isCon
 function segStyle(sel,attr,val){ document.querySelectorAll(sel+" button").forEach(b=>{ const on=b.dataset[attr]===val; b.setAttribute("aria-pressed",on); b.className="seg px-3 py-1 rounded transition-colors "+(on?"bg-white text-blue-600 shadow-sm":"text-gray-700 hover:text-blue-600"); }); }
 function setDevice(d){ S.device=d; document.getElementById("device").dataset.device=d; segStyle("#devSeg","dev",d); if(S.picker) closePicker(); if(d==="mobile") markDone("device"); }
 document.getElementById("devSeg").addEventListener("click",e=>{ const b=e.target.closest("[data-dev]"); if(!b) return; setDevice(b.dataset.dev); log("device_switched",{}); });
-function setPersona(p){ S.persona=p; S.tab="items"; S.filters=[]; S.q=""; S.selected.clear(); S.picker=null; S.alerts=[]; segStyle("#perSeg","per",p); segStyle("#perSegM","per",p); renderApp(); renderTasks(); }
+function setPersona(p){ S.aiOn=false; S.persona=p; S.tab="items"; S.filters=[]; S.q=""; S.selected.clear(); S.picker=null; S.alerts=[]; segStyle("#perSeg","per",p); segStyle("#perSegM","per",p); renderApp(); renderTasks(); }
 ["perSeg","perSegM"].forEach(id=>document.getElementById(id).addEventListener("click",e=>{ const b=e.target.closest("[data-per]"); if(b) setPersona(b.dataset.per); }));
 function responsive(){ const phone=window.innerWidth<640, was=S.phone; S.phone=phone;
   document.querySelector(".layout").style.gridTemplateColumns=window.innerWidth>=1180?"minmax(0,1fr) 300px":"minmax(0,1fr)";
@@ -656,7 +701,8 @@ window.addEventListener("resize",responsive);
 
 /* deep links for demos and screenshots: #shot #tablet #mobile #seeker #picker #js #dup #blocked #bulk #hygiene #insights #views #alert */
 function boot(){ const h=(location.hash||"").slice(1).split("-");
-  if(h.includes("shot")) document.documentElement.classList.add("shot");
+  if(h.includes("shot")){ document.documentElement.classList.add("shot"); S.tip=false; }
+  if(h.includes("ai")) S.aiOn=true;
   if(h.includes("seeker")) S.persona="seeker";
   segStyle("#perSeg","per",S.persona); segStyle("#perSegM","per",S.persona);
   responsive(); if(!S.phone) setDevice(h.includes("tablet")?"tablet":h.includes("mobile")?"mobile":"desktop");

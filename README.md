@@ -4,7 +4,7 @@ A concept prototype for a Product Manager case study: a scalable tagging system 
 
 **Live prototype:** https://mibbrahim.github.io/unified-tagging-system/
 
-**Case study deck (PDF, 32 slides):** [Unified-Tagging-System-Case-Study.pdf](Unified-Tagging-System-Case-Study.pdf). It covers research, personas, design, architecture, metrics, user testing and scalability testing.
+**Case study deck (PDF, 33 slides):** [Unified-Tagging-System-Case-Study.pdf](Unified-Tagging-System-Case-Study.pdf). It covers research, personas, design, architecture, metrics, user testing and scalability testing.
 
 ![Tag picker with smart suggestions on desktop](screenshots/desktop-suggestions.png)
 
@@ -12,6 +12,9 @@ A concept prototype for a Product Manager case study: a scalable tagging system 
 
 One tag engine serves every surface. Switch **Device** (desktop, tablet, mobile) and **View as** (employer, job seeker) at the top of the page. On a real phone the app opens full screen.
 
+- **AI auto-tag.** AI reads the CVs or job posts and proposes tags as dashed purple chips. A person accepts one or all, and can undo.
+- **Ask in plain words.** Type `remote react` in the search box and AI turns it into tag filters.
+- **AI summary and speed test.** Insights shows a plain-language summary and a live test on 5,000 tags and 10,000 candidates.
 - **Smart suggestions.** Up to five, each with its reason: from the CV or job post, tags the team often uses together, your recent tags.
 - **Reuse before create.** Typing `js` finds the existing `javascript` tag through a synonym. Typing `frontnd` shows a warning with a one-tap **Use frontend**.
 - **Safe by design.** Tags about age, gender, religion, marital status, health, ethnicity or nationality can't be created. The picker explains why with an error alert.
@@ -26,6 +29,8 @@ One tag engine serves every surface. Switch **Device** (desktop, tablet, mobile)
 | Tablet | Phone | Phone, job seeker |
 |---|---|---|
 | ![Tablet side-sheet picker](screenshots/tablet-picker.png) | ![Phone bottom-sheet picker with duplicate warning](screenshots/mobile-picker.png) | ![Job seeker saved jobs on a phone](screenshots/mobile-job-seeker.png) |
+
+![AI auto-tag](screenshots/desktop-ai-auto-tag.png)
 
 ### Alerts
 
